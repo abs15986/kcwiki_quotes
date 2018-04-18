@@ -352,8 +352,7 @@ def clean_seasonal():
         try:
             ship_id = str(int(key))
             for v_key in voices.keys():
-                if v_key not in id2Desc.values():
-                    quotes[ship_id][v_key] = ""
+                quotes[ship_id][v_key] = ""
         except Exception:
             pass
     with open('./quotes.json', 'w', encoding='utf-8') as fp:
