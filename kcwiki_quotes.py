@@ -11,20 +11,31 @@ from requests.exceptions import ConnectionError
 from collections import OrderedDict
 
 
-seasonal_suffix = ''
-seasonal_suffixs = []
+kc3_seasonal_suffixs = []
 
 with open('./config.json', 'r', encoding='utf-8') as fp:
     config = json.load(fp)
-    seasonal_suffix = config['kc3_seasonal_suffix']
-    seasonal_suffixs = config['kcwiki_seasonal_suffixs']
+    kc3_seasonal_suffixs = config['kc3_seasonal_suffixs']
 
 
 def print_help():
-    print('[kcwiki_quotes.py 使用帮助]\n')
+    print('「kcwiki_quotes.py 使用帮助」\n')
     print('>> python kcwiki_quotes.py --fetch\n?> 获取最新的季节性语音、通常语音以及最新的quotes.json和quotes_size.json\n')
+    print('>> python kcwiki_quotes.py --repair\n?> 修复kcwiki的季节性语音的WikiText\n')
     print('>> python kcwiki_quotes.py --update\n?> 更新quotes.json文件\n')
     print('* 遇到Error请不要慌张，注意读报错再做判断！ *')
+
+
+def kcwiki_tutorial():
+    print('「kcwiki 重命名文件教程」\n')
+    print('1. 登录Kcwiki账号')
+    print('2. 点击 https://zh.kcwiki.org/wiki/Special:替换文本')
+    print('3. 搜索名空间点击 "（主）" 和 "File" 选项')
+    print('4. 勾选 "仅在页面内容中替换" 和 "可能的话，在页面名称中替换"')
+    print('5. 点击 "继续"')
+    print('6. 进入新页面，去掉 "重定向至新标题时保留旧标题" 选项')
+    print('7. 点击 "替换"按钮')
+    print('* 谢谢你的工作让kcwiki更好！ *')
 
 
 name2VoiceId = {
@@ -60,28 +71,6 @@ desc2Id = {}
 for k, v in id2Desc.items():
     desc2Id[v] = str(k)
 
-archive_pattern = re.compile(r'[0-9a-z]+-([0-9A-Za-z]+)')
-
-
-def filter_suffix(raw_text):
-    suffix_set = set()
-    text_tokens = raw_text.split()
-    for token in text_tokens:
-        if token and type(token) is str:
-            re_result = re.match(archive_pattern, token)
-            if re_result:
-                archive_name = re_result.group(1)
-                for prefix in name2VoiceId.keys():
-                    if archive_name.startswith(prefix):
-                        suffix = archive_name.lstrip(prefix)
-                        if suffix:
-                            suffix_set.add(suffix)
-                        break
-    print('[4.1] 共获得以下季节性后缀：')
-    suffix_list = list(suffix_set)
-    print(json.dumps(suffix_list, ensure_ascii=False, indent=2))
-    print('[4.2] 请酌情添加入 config.json 的 "kcwiki_seasonal_suffixs" 数组中。')
-
 
 def pre_subtitles(subtitles):
     res = {}
@@ -97,7 +86,7 @@ def update_subtitles():
     quotes = {}
     with open('./quotes.json', 'r', encoding='utf-8') as fp:
         quotes = json.load(fp)
-    with open('./subtitles.json') as fp:
+    with open('./subtitles.json', 'r', encoding='utf-8') as fp:
         subtitles = json.load(fp)
     for ship_id, voices in subtitles.items():
         s_id = str(ship_id)
@@ -122,8 +111,8 @@ def fetch_data():
     subtitles_url = 'http://api.kcwiki.org/subtitles/detail'
     quotes_size_url = 'https://raw.githubusercontent.com/KC3Kai/KC3Kai/master/src/data/quotes_size.json'
     quotes_url = 'https://raw.githubusercontent.com/KC3Kai/kc3-translations/master/data/scn/quotes.json'
-    seasonal_url = 'http://zh.kcwiki.org/index.php?title=%E8%88%B0%E5%A8%98%E7%99%BE%E7%A7%91:%E8%AF%AD%E9%9F%B3%E5%AD%97%E5%B9%95&action=raw'
-    kcdata_url = 'http://kcwikizh.github.io/kcdata/ship/all.json'
+    seasonal_url = 'https://zh.kcwiki.org/index.php?title=%E8%88%B0%E5%A8%98%E7%99%BE%E7%A7%91:%E8%AF%AD%E9%9F%B3%E5%AD%97%E5%B9%95&action=raw'
+    kcdata_url = 'https://kcwikizh.github.io/kcdata/ship/all.json'
     try:
         subtitles = session.get(subtitles_url).json()
         with open('./subtitles.json', 'w', encoding='utf-8') as fp:
@@ -135,10 +124,9 @@ def fetch_data():
         print('[2] quotes_size.json 获取成功！')
         quotes = session.get(quotes_url).json()
         with open('./quotes.json', 'w', encoding='utf-8') as fp:
-            json.dump(quotes, fp, ensure_ascii=False)
+            json.dump(quotes, fp, ensure_ascii=False, indent=2)
         print('[3] quotes.json 获取成功！')
         seasonal = session.get(seasonal_url).text
-        filter_suffix(seasonal)
         with open('./seasonal.txt', 'w', encoding='utf-8') as fp:
             fp.write(seasonal)
         print('[4] seasonal.txt 获取成功！')
@@ -158,11 +146,12 @@ def update_seasonal():
     quotes = {}
     quotes_size_json = {}
     kcdata_json = []
-    with open('./kcdata.json') as fp:
+    with open('./kcdata.json', 'r', encoding='utf-8') as fp:
         kcdata_json = json.load(fp)
     for ship in kcdata_json:
         wikiId2apiId[ship['wiki_id']] = ship['id']
     voice_datajson = {}
+    suff_data = {}
     with open('./seasonal.txt', 'r', encoding='utf-8') as fp:
         line = fp.readline()
         cur_shipid = None
@@ -173,17 +162,16 @@ def update_seasonal():
                 line = fp.readline()
                 continue
             if '档名' in _line:
-                for suff in seasonal_suffixs:
-                    if _line.endswith(suff):
-                        archive_name = _line.split()[-1].replace(suff, '')
-                        archive_name_sp = archive_name.split('-')
-                        wiki_id = archive_name_sp[0]
-                        cur_voiceid = name2VoiceId[archive_name_sp[1]]
-                        cur_shipid = wikiId2apiId[wiki_id]
-                        s_id = str(cur_shipid)
-                        if s_id not in voice_datajson:
-                            voice_datajson[s_id] = {}
-                        break
+                wiki_id, voice_type, suff = arch2tuple(_line.split()[-1])
+                cur_voiceid = name2VoiceId[voice_type]
+                cur_shipid = wikiId2apiId[wiki_id]
+                s_id = str(cur_shipid)
+                v_id = str(cur_voiceid)
+                if s_id not in voice_datajson:
+                    voice_datajson[s_id] = {}
+                if s_id not in suff_data:
+                    suff_data[s_id] = {}
+                suff_data[s_id][v_id] = suff
             elif '中文译文' in _line:
                 if not cur_shipid:
                     line = fp.readline()
@@ -212,22 +200,130 @@ def update_seasonal():
                 seasonal_keys = list(quotes_size_json[api_id][v_id].values())
                 desc = id2Desc[int(v_id)]
                 _content = content.strip()
-                vid_seasonal = '{}@{}'.format(
-                    v_id, seasonal_suffix)
-                if seasonal_suffix in seasonal_keys:
+                suff = suff_data[api_id][v_id]
+                for v_key in seasonal_keys:
                     if desc in quotes[api_id] and quotes[api_id][desc] == _content:
                         continue
-                    quotes[api_id][vid_seasonal] = _content
+                    if v_key and suff.find(v_key) != -1:
+                        vid_seasonal = '{}@{}'.format(
+                            v_id, v_key)
+                        quotes[api_id][vid_seasonal] = _content
 
     with open('quotes.json', 'w', encoding='utf-8') as fp:
         json.dump(quotes, fp, ensure_ascii=False,
                   indent=2)
 
 
+arch_pattern = re.compile(r'([0-9a-z]+)-([0-9A-Za-z]+)')
+
+
+def arch2tuple(arch_name):
+    arch_name_groups = re.match(arch_pattern, arch_name)
+    if not arch_name_groups:
+        return None, None, None
+    wiki_id = arch_name_groups.group(1)
+    voice_type = None
+    suffix = None
+    file_name = arch_name_groups.group(2)
+    for v_type in name2VoiceId.keys():
+        if file_name.startswith(v_type):
+            voice_type = v_type
+            suffix = file_name.replace(voice_type, '')
+            break
+    return wiki_id, voice_type, suffix
+
+
+def check_suffix(suffix):
+    if not suffix:
+        return True
+    for sf in kc3_seasonal_suffixs:
+        if suffix.startswith(sf):
+            return False
+    return True
+
+
+def trim_num(arch_name):
+    while arch_name[-1].isdigit():
+        arch_name = arch_name[:-1]
+    return arch_name
+
+
+def select_handle(arch_name):
+    suffix_names = json.dumps(kc3_seasonal_suffixs, indent=2)
+    suffix = arch2tuple(arch_name)[2]
+    if check_suffix(suffix):
+        print('!! > "{}" 不在 \n{} 之中可能无法生成文件'.format(suffix, suffix_names))
+        select = input('是否删除后缀数字?[Y/N]').lower()
+        if select == 'y':
+            new_arch_name = trim_num(arch_name)
+            print('\n{} ~> {} 修改成功！'.format(arch_name, new_arch_name))
+            return new_arch_name
+    select = input('是否修改档名?[Y/N]').lower()
+    if not select or select != 'y':
+        return arch_name
+    print('可供选择的季节性后缀有\n{}\n'.format(suffix_names))
+    new_arch_name = input('请输入新的档名: ')
+    new_wiki_id, new_voice_tyoe, new_suffix = arch2tuple(new_arch_name)
+    while check_suffix(new_suffix):
+        new_arch_name = input(
+            '["档名"] = "{}"\n请重试: \n{}\n请输入新的档名: '.format(arch_name, suffix_names))
+        new_wiki_id, new_voice_tyoe, new_suffix = arch2tuple(new_arch_name)
+    print('\n{} ~> {} 修改成功！'.format(arch_name, new_arch_name))
+    return '{}-{}{}'.format(new_wiki_id, new_voice_tyoe, new_suffix)
+
+
+def repair_subtitles():
+    flag = False
+    log = open('./repair.log', 'w', encoding='utf-8')
+    suffix_table = {}
+    subtitle_pattern = re.compile(r'{{台词翻译表\|type=seasonal\s*([\s\S]+?)\s*}}')
+    subtitle_idx = 0
+    with open('./seasonal.txt', 'r', encoding='utf-8') as fpr:
+        seasonal_txt = fpr.read()
+        all_subtitles = subtitle_pattern.findall(seasonal_txt)
+        for subtitle in all_subtitles:
+            subtitle_idx += 1
+            _subtitle = '\n["编号"] = "{}"\n'.format(str(subtitle_idx).zfill(3))
+            arch_name = ''
+            subtitle_info = {}
+            for sub_line in subtitle.split('\n'):
+                line = sub_line.lstrip(' |').strip().split('=')
+                attr = line[0].strip()
+                value = line[1].strip()
+                subtitle_info[attr] = value
+                if attr == '档名':
+                    arch_name = value
+                _subtitle += '["{}"] = "{}"\n'.format(attr, value)
+            print(_subtitle)
+            new_arch_name = select_handle(arch_name)
+            subtitle_info['档名'] = new_arch_name
+            if new_arch_name != arch_name:
+                flag = True
+                log.write('No.{} "{}" ~> "{}"\n'.format(
+                    str(subtitle_idx).zfill(3), arch_name, new_arch_name))
+                log.flush()
+                seasonal_txt = seasonal_txt.replace(arch_name, new_arch_name)
+            suffix = arch2tuple(new_arch_name)[2]
+            if suffix not in suffix_table:
+                suffix_table[suffix] = []
+            suffix_table[suffix].append(subtitle_info)
+            with open('./seasonal.txt', 'w', encoding='utf-8') as fpw:
+                fpw.write(seasonal_txt)
+    log.close()
+    if flag:
+        print('WikiText发生了改变:')
+        print('./repair.log >\n')
+        with open('./repair.log', 'r', encoding='utf-8') as fp:
+            print(fp.read())
+        print('请上传至 https://zh.kcwiki.org/index.php?title=舰娘百科:语音字幕')
+        print('需要替换kcwiki文本！')
+        kcwiki_tutorial()
+
+
 def minify_all():
     quotes = {}
     kcdata_json = []
-    with open('./kcdata.json') as fp:
+    with open('./kcdata.json', 'r', encoding='utf-8') as fp:
         kcdata_json = json.load(fp)
     with open('./quotes.json', 'r', encoding='utf-8') as fp:
         quotes = json.load(fp)
@@ -279,6 +375,7 @@ if __name__ == '__main__':
         fetch_data()
     elif cmd == '--update':
         update_data()
+    elif cmd == '--repair':
+        repair_subtitles()
     else:
         print_help()
-        sys.exit(0)
