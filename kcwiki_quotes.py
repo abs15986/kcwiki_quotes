@@ -22,6 +22,7 @@ def print_help():
     print('>> python kcwiki_quotes.py --fetch\n?> 获取最新的季节性语音、通常语音以及最新的quotes.json和quotes_size.json\n')
     print('>> python kcwiki_quotes.py --repair\n?> 修复kcwiki的季节性语音的WikiText\n')
     print('>> python kcwiki_quotes.py --update\n?> 更新quotes.json文件\n')
+    print('>> python kcwiki_quotes.py --clean\n?> 清空quotes.json的季节性语音\n')
     print('* 遇到Error请不要慌张，注意读报错再做判断！ *')
 
 
@@ -161,7 +162,11 @@ def update_seasonal():
                 line = fp.readline()
                 continue
             if '档名' in _line:
-                wiki_id, voice_type, suff = arch2tuple(_line.split()[-1])
+                arch_name = _line.split()[-1]
+                wiki_id, voice_type, suff = arch2tuple(arch_name)
+                if not voice_type:
+                    print('档名有错：{}'.format(arch_name))
+
                 cur_voiceid = name2VoiceId[voice_type]
                 cur_shipid = wikiId2apiId[wiki_id]
                 s_id = str(cur_shipid)
@@ -339,6 +344,23 @@ def repair_subtitles():
         kcwiki_tutorial()
 
 
+def clean_seasonal():
+    quotes = {}
+    with open('./quotes.json', 'r', encoding='utf-8') as fp:
+        quotes = json.load(fp)
+    for key, voices in quotes.items():
+        try:
+            ship_id = str(int(key))
+            for v_key in voices.keys():
+                if v_key not in id2Desc.values():
+                    quotes[ship_id][v_key] = ""
+        except Exception:
+            pass
+    with open('./quotes.json', 'w', encoding='utf-8') as fp:
+        json.dump(quotes, fp, ensure_ascii=False,
+                  indent=2)
+
+
 def minify_all():
     quotes = {}
     kcdata_json = []
@@ -398,5 +420,7 @@ if __name__ == '__main__':
         update_data()
     elif cmd == '--repair':
         repair_subtitles()
+    elif cmd == '--clean':
+        clean_seasonal()
     else:
         print_help()
