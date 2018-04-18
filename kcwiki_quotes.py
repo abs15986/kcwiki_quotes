@@ -122,7 +122,7 @@ def fetch_data():
     subtitles_url = 'http://api.kcwiki.org/subtitles/detail'
     quotes_size_url = 'https://raw.githubusercontent.com/KC3Kai/KC3Kai/master/src/data/quotes_size.json'
     quotes_url = 'https://raw.githubusercontent.com/KC3Kai/kc3-translations/master/data/scn/quotes.json'
-    seasonal_url = 'http://zh.kcwiki.org?title=%E8%88%B0%E5%A8%98%E7%99%BE%E7%A7%91:%E8%AF%AD%E9%9F%B3%E5%AD%97%E5%B9%95&action=raw'
+    seasonal_url = 'http://zh.kcwiki.org/index.php?title=%E8%88%B0%E5%A8%98%E7%99%BE%E7%A7%91:%E8%AF%AD%E9%9F%B3%E5%AD%97%E5%B9%95&action=raw'
     kcdata_url = 'http://kcwikizh.github.io/kcdata/ship/all.json'
     try:
         subtitles = session.get(subtitles_url).json()
